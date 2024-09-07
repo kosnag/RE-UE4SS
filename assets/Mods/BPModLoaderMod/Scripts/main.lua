@@ -110,7 +110,7 @@ local function SetupModOrder()
     end
 end
 
-local function LoadModConfigs()
+local function LoadModConfigsWithoutTilde()
     -- Load configurations for mods.
     local Dirs = IterateGameDirectories();
     if not Dirs then
@@ -160,7 +160,58 @@ local function LoadModConfigs()
     SetupModOrder()
 end
 
-LoadModConfigs()
+local function LoadModConfigsWithTilde()
+    -- Load configurations for mods.
+    local Dirs = IterateGameDirectories();
+    if not Dirs then
+        error("[BPModLoader] UE4SS does not support loading mods for this game.")
+    end
+    local LogicModsDir = Dirs.Game.Content.Paks["~LogicMods"]
+    if not Dirs then error("[BPModLoader] IterateGameDirectories failed, cannot load BP mod configurations.") end
+    if not LogicModsDir then
+        CreateLogicModsDirectory();
+        Dirs = IterateGameDirectories();
+        LogicModsDir = Dirs.Game.Content.Paks["~LogicMods"]
+        if not LogicModsDir then error("[BPModLoader] Unable to find or create Content/Paks/~LogicMods directory. Try creating manually.") end
+    end
+    for ModDirectoryName,ModDirectory in pairs(LogicModsDir) do
+        Log(string.format("Mod: %s\n", ModDirectoryName))
+        for _,ModFile in pairs(ModDirectory.__files) do
+            Log(string.format("    ModFile: %s\n", ModFile.__name))
+            if ModFile.__name == "config.lua" then
+                dofile(ModFile.__absolute_path)
+                if type(Mods[ModDirectoryName]) ~= "table" then break end
+                if not Mods[ModDirectoryName].AssetName then break end
+                Mods[ModDirectoryName].AssetNameAsFName = UEHelpers.FindOrAddFName(Mods[ModDirectoryName].AssetName)
+                break
+            end
+        end
+    end
+
+    -- Load a default configuration for mods that didn't have their own configuration.
+    for _, ModFile in pairs(LogicModsDir.__files) do
+        local ModName = ModFile.__name
+        local ModNameNoExtension = ModName:match("(.+)%..+$")
+        local FileExtension = ModName:match("^.+(%..+)$");
+        if FileExtension == ".pak" and not Mods[ModNameNoExtension] then
+            --Log("--------------\n")
+            --Log(string.format("ModFile: '%s'\n", ModFile.__name))
+            --Log(string.format("ModNameNoExtension: '%s'\n", ModNameNoExtension))
+            --Log(string.format("FileExtension: %s\n", FileExtension))
+            Mods[ModNameNoExtension] = {}
+            Mods[ModNameNoExtension].AssetName = DefaultModConfig.AssetName
+            Mods[ModNameNoExtension].AssetNameAsFName = DefaultModConfig.AssetNameAsFName
+            Mods[ModNameNoExtension].AssetPath = string.format("/Game/Mods/%s/ModActor", ModNameNoExtension)
+        end
+    end
+
+    LoadModOrder()
+
+    SetupModOrder()
+end
+
+LoadModConfigsWithoutTilde()
+LoadModConfigsWithTilde()
 
 for _,v in ipairs(OrderedMods) do
     Log(string.format("%s == %s\n", v.Name, v))
